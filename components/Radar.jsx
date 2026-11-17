@@ -45,7 +45,7 @@ export default function Radar() {
       .filter((c) => !seg || c.segment === seg)
       .filter((c) => !oss || (oss === "open" ? c.oss.startsWith("Open") : !c.oss.startsWith("Open")))
       .filter((c) => !only.hiring || c.open_roles.length)
-      .filter((c) => !only.founding || c.founding_roles.length)
+      .filter((c) => !only.founding || c.founding_roles.length || (c.x_hiring || []).length)
       .filter((c) => !only.discord || c.discord)
       .filter((c) => !only.contact || c.people.some((p) => p.x || p.linkedin))
       .filter((c) => !only.active || (c.last_push_days !== null && c.last_push_days <= 14))
@@ -75,6 +75,7 @@ export default function Radar() {
         <div className="stat"><b>{fmt(s.with_contact)}</b><span>with founder X / LinkedIn</span></div>
         <div className="stat"><b>{fmt(s.hiring)}</b><span>hiring now</span></div>
         <div className="stat"><b>{fmt(s.founding)}</b><span>founding-engineer roles</span></div>
+        {s.x_hiring ? <div className="stat"><b>{fmt(s.x_hiring)}</b><span>hiring on X</span></div> : null}
       </div>
 
       <div className="tabs">
@@ -120,7 +121,7 @@ export default function Radar() {
                     <td className="num">{ago(c.last_push_days)}</td>
                     <td>{c.discord ? <span className="chip acc">Discord {fmt(c.discord_members)}{c.discord_online_pct ? ` · ${c.discord_online_pct}% on` : ""}</span> : null}{c.slack ? <span className="chip">Slack</span> : null}{c.company_x ? <span className="chip">X</span> : null}</td>
                     <td>{c.people.slice(0, 2).map((p) => <div key={p.name}>{p.name}{p.x || p.linkedin ? " ✓" : ""}</div>)}{c.people.length > 2 ? <div className="sub">+{c.people.length - 2} more</div> : null}</td>
-                    <td>{c.founding_roles.length ? <span className="chip good">Founding</span> : c.open_roles.length ? <span className="chip warn">{c.open_roles.length} roles</span> : null}</td>
+                    <td>{c.founding_roles.length ? <span className="chip good">Founding</span> : c.open_roles.length ? <span className="chip warn">{c.open_roles.length} roles</span> : null}{(c.x_hiring || []).length ? <span className="chip good">Hiring on X</span> : null}</td>
                   </tr>
                 ))}
               </tbody>
@@ -209,6 +210,7 @@ function Detail({ c, onClose }) {
 
         {c.open_roles.length ? <><h3>Open roles</h3>{c.open_roles.map((r) => <span key={r} className={`chip ${/founding/i.test(r) ? "good" : ""}`}>{r}</span>)}</> : null}
         {c.building.length ? <><h3>What they're building (recent commits)</h3><ul>{c.building.map((b, i) => <li key={i}>{b}</li>)}</ul></> : null}
+        {(c.x_posts || []).length ? <><h3>On X</h3><ul>{c.x_posts.map((p, i) => <li key={i}>{p.hiring ? <span className="chip good">Hiring</span> : null} <a href={p.url} target="_blank" rel="noreferrer">@{p.handle}</a>: {p.text} <span className="sub">{p.date} · {fmt(p.likes)} likes</span></li>)}</ul></> : null}
         {c.news.length ? <><h3>News</h3><ul>{c.news.map((n, i) => <li key={i}>{n.url ? <a href={n.url} target="_blank" rel="noreferrer">{n.text}</a> : n.text} <span className="sub">{n.date}</span></li>)}</ul></> : null}
       </aside>
     </>

@@ -27,7 +27,7 @@ people = {}
 for p in csv.DictReader(open(os.path.join(A.dir, "PEOPLE.csv"))):
     people.setdefault(p["company"], []).append({k: p[k] for k in ("name", "role", "linkedin", "x", "github", "source", "confidence")})
 
-gh, prev_stars, disc, news, activity = {}, {}, {}, {}, []
+gh, prev_stars, disc, news, activity, xposts = {}, {}, {}, {}, [], {}
 if A.db and os.path.exists(A.db):
     c = sqlite3.connect(A.db)
     runs = [r[0] for r in c.execute("SELECT ts FROM runs ORDER BY ts DESC LIMIT 2")]
@@ -45,6 +45,13 @@ if A.db and os.path.exists(A.db):
     for comp, title, url, pts, created in c.execute("SELECT company,title,url,points,created FROM hn ORDER BY created DESC LIMIT 400"):
         news.setdefault(comp, []).append({"date": created[:10], "text": f"{title} (HN, {pts} pts)", "url": url})
         activity.append({"date": created[:10], "type": "Hacker News", "company": comp, "text": f"{title} ({pts} pts)", "url": url})
+    if c.execute("SELECT name FROM sqlite_master WHERE name='x_posts'").fetchone():
+        for comp, h, who, date, text, url, likes, hit in c.execute(
+                "SELECT company,handle,who,date,text,url,likes,hiring FROM x_posts ORDER BY date DESC LIMIT 3000"):
+            p = {"date": date[:10], "handle": h, "who": who, "text": text[:280], "url": url, "likes": likes, "hiring": bool(hit)}
+            xposts.setdefault(comp, []).append(p)
+            if hit or len([a for a in activity if a["type"] == "X"]) < 150:
+                activity.append({"date": date[:10], "type": "X hiring" if hit else "X", "company": comp, "text": f"@{h}: {text[:200]}", "url": url})
     for comp, g in gh.items():
         if g["release_at"]:
             news.setdefault(comp, []).append({"date": g["release_at"][:10], "text": f"Release {g['release']}", "url": f"https://github.com/{g['repo']}/releases"})
@@ -63,9 +70,11 @@ for i, r in enumerate(csv.DictReader(open(os.path.join(A.dir, "DIRECTORY.csv")))
     pct = round(100 * online / members, 1) if members and online is not None else (float(r["discord_online_pct"]) if r["discord_online_pct"] else None)
     if online is None and members and pct is not None: online = round(members * pct / 100)
     roles = split(r["open_roles"])
+    xp = xposts.get(name, [])
+    x_hiring = [p for p in xp if p["hiring"]][:3]
     ppl = people.get(name, [])
     score = (num(r["fit"]) or 0) * 5 + (25 if r["founding_roles"] else 12 if roles else 0) + (8 if any(p["x"] or p["linkedin"] for p in ppl) else 0) \
-        + min(10, pct or 0) + (6 if lpd is not None and lpd <= 14 else 0) + min(10, (gained or 0) / 20)
+        + min(10, pct or 0) + (6 if lpd is not None and lpd <= 14 else 0) + min(10, (gained or 0) / 20) + (10 if x_hiring else 0)
     companies.append({
         "id": i, "name": name, "website": r["website"], "segment": r["segment"],
         "relevance": "core" if r["segment"] in CORE else "adjacent", "isolation": r["isolation"], "kind": r["kind"],
@@ -76,6 +85,7 @@ for i, r in enumerate(csv.DictReader(open(os.path.join(A.dir, "DIRECTORY.csv")))
         "emails": split(r["emails"]), "people": ppl, "yc_batch": r["yc_batch"], "team_size": r["team_size"], "hq": r["hq"],
         "careers": r["careers"], "open_roles": roles, "founding_roles": split(r["founding_roles"]),
         "news": sorted(news.get(name, []), key=lambda n: n["date"], reverse=True)[:6], "building": g.get("building", []),
+        "x_posts": xp[:5], "x_hiring": x_hiring,
         "lane": r["reach_out_lane"], "channel": r["best_channel"], "hook": r["hook"], "note": (s.get("note") or "")[:220],
         "score": round(score, 1),
     })
@@ -88,6 +98,7 @@ stats = {
     "open_source": sum(c["oss"].startswith("Open") for c in companies), "discord": sum(bool(c["discord"]) for c in companies),
     "with_contact": sum(any(p["x"] or p["linkedin"] for p in c["people"]) for c in companies),
     "hiring": sum(bool(c["open_roles"]) for c in companies), "founding": sum(bool(c["founding_roles"]) for c in companies),
+    "x_posts": sum(len(v) for v in xposts.values()), "x_hiring": sum(bool(c["x_hiring"]) for c in companies),
 }
 data = {"generated_at": datetime.now(timezone.utc).isoformat(), "stats": stats, "companies": companies, "activity": activity[:300]}
 body = json.dumps(data, separators=(",", ":"))
